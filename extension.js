@@ -1,167 +1,129 @@
 "use strict";
 
-module.exports = function(nodecg) {
-  var WebRequest = require("web-request");
+module.exports = function (nodecg) {
   var donationsRep = nodecg.Replicant("donations", {
-    defaultValue: []
+    defaultValue: [],
+  });
+  var allDonationsRep = nodecg.Replicant("alldonations", {
+    defaultValue: [],
   });
   var campaignTotalRep = nodecg.Replicant("total", {
-    defaultValue: 0
+    defaultValue: 0,
   });
   var pollsRep = nodecg.Replicant("donationpolls", {
-    defaultValue: []
+    defaultValue: [],
   });
   var scheduleRep = nodecg.Replicant("schedule", {
-    defaultValue: []
+    defaultValue: [],
   });
   var challengesRep = nodecg.Replicant("challenges", {
-    defaultValue: []
+    defaultValue: [],
   });
   var rewardsRep = nodecg.Replicant("rewards", {
-    defaultValue: []
+    defaultValue: [],
   });
-  var defaultURL = "https://tiltify.com/api/v3";
 
-  if (nodecg.bundleConfig.tiltify_api_key == "") {
-    nodecg.log.info("Please set Tiltify API key in cfg/tiltify-api.json");
+  var TiltifyClient = require("tiltify-api-client");
+
+  if (nodecg.bundleConfig.tiltify_api_key === "") {
+    nodecg.log.info("Please set tiltify_api_key in cfg/nodecg-tiltify.json");
     return;
   }
 
-  if (nodecg.bundleConfig.tiltify_campaign_id == "") {
-    nodecg.log.info("Please set Tiltify campaign ID in cfg/tiltify-api.json");
+  if (nodecg.bundleConfig.tiltify_campaign_id === "") {
+    nodecg.log.info(
+      "Please set tiltify_campaign_id in cfg/nodecg-tiltify.json"
+    );
     return;
   }
+
+  var client = new TiltifyClient(nodecg.bundleConfig.tiltify_api_key);
 
   async function askTiltifyForDonations() {
-    let donationsRequest = await WebRequest.get(
-      `${defaultURL}/campaigns/${
-        nodecg.bundleConfig.tiltify_campaign_id
-      }/donations`,
-      {
-        headers: {
-          Authorization: "Bearer " + nodecg.bundleConfig.tiltify_api_key
+    client.Campaigns.getRecentDonations(
+      nodecg.bundleConfig.tiltify_campaign_id,
+      function (donations) {
+        for (let i = 0; i < donations.length; i++) {
+          var found = donationsRep.value.find(function (element) {
+            return element.id === donations[i].id;
+          });
+          if (found === undefined) {
+            donations[i].shown = false;
+            donations[i].read = false;
+            donationsRep.value.push(donations[i]);
+          }
         }
       }
     );
+  }
 
-    processDonations(donationsRequest.content);
+  async function askTiltifyForAllDonations() {
+    client.Campaigns.getDonations(
+      nodecg.bundleConfig.tiltify_campaign_id,
+      function (alldonations) {
+        if (
+          JSON.stringify(allDonationsRep.value) !== JSON.stringify(alldonations)
+        ) {
+          allDonationsRep.value = alldonations;
+        }
+      }
+    );
   }
 
   async function askTiltifyForPolls() {
-    let pollsRequest = await WebRequest.get(
-      `${defaultURL}/campaigns/${
-        nodecg.bundleConfig.tiltify_campaign_id
-      }/polls`,
-      {
-        headers: {
-          Authorization: "Bearer " + nodecg.bundleConfig.tiltify_api_key
+    client.Campaigns.getPolls(
+      nodecg.bundleConfig.tiltify_campaign_id,
+      function (polls) {
+        if (JSON.stringify(pollsRep.value) !== JSON.stringify(polls)) {
+          pollsRep.value = polls;
         }
       }
     );
-
-    processPolls(pollsRequest.content);
   }
 
   async function askTiltifyForSchedule() {
-    let scheduleRequest = await WebRequest.get(
-      `${defaultURL}/campaigns/${
-        nodecg.bundleConfig.tiltify_campaign_id
-      }/schedule`,
-      {
-        headers: {
-          Authorization: "Bearer " + nodecg.bundleConfig.tiltify_api_key
+    client.Campaigns.getSchedule(
+      nodecg.bundleConfig.tiltify_campaign_id,
+      function (schedule) {
+        if (JSON.stringify(scheduleRep.value) !== JSON.stringify(schedule)) {
+          scheduleRep.value = schedule;
         }
       }
     );
-
-    processSchedule(scheduleRequest.content);
   }
 
   async function askTiltifyForChallenges() {
-    let challengesRequest = await WebRequest.get(
-      `${defaultURL}/campaigns/${
-        nodecg.bundleConfig.tiltify_campaign_id
-      }/challenges`,
-      {
-        headers: {
-          Authorization: "Bearer " + nodecg.bundleConfig.tiltify_api_key
+    client.Campaigns.getChallenges(
+      nodecg.bundleConfig.tiltify_campaign_id,
+      function (challenges) {
+        if (
+          JSON.stringify(challengesRep.value) !== JSON.stringify(challenges)
+        ) {
+          challengesRep.value = challenges;
         }
       }
     );
-
-    processChallenges(challengesRequest.content);
   }
 
   async function askTiltifyForRewards() {
-    let rewardsRequest = await WebRequest.get(
-      `${defaultURL}/campaigns/${
-        nodecg.bundleConfig.tiltify_campaign_id
-      }/rewards`,
-      {
-        headers: {
-          Authorization: "Bearer " + nodecg.bundleConfig.tiltify_api_key
+    client.Campaigns.getRewards(
+      nodecg.bundleConfig.tiltify_campaign_id,
+      function (rewards) {
+        if (JSON.stringify(rewardsRep.value) !== JSON.stringify(rewards)) {
+          rewardsRep.value = rewards;
         }
       }
     );
-
-    processRewards(rewardsRequest.content);
   }
 
   async function askTiltifyForTotal() {
-    var donationTotalRequest = await WebRequest.get(
-      `${defaultURL}/campaigns/${nodecg.bundleConfig.tiltify_campaign_id}`,
-      {
-        headers: {
-          Authorization: "Bearer " + nodecg.bundleConfig.tiltify_api_key
-        }
+    client.Campaigns.get(nodecg.bundleConfig.tiltify_campaign_id, function (
+      campaign
+    ) {
+      if (campaignTotalRep.value !== parseFloat(campaign.amountRaised)) {
+        campaignTotalRep.value = parseFloat(campaign.amountRaised);
       }
-    );
-
-    processTotal(donationTotalRequest.content);
-  }
-
-  function processTotal(content) {
-    var parsedContent = JSON.parse(content);
-    campaignTotalRep.value = parseFloat(parsedContent.data.amountRaised);
-  }
-
-  function processDonations(content) {
-    var parsedContent = JSON.parse(content);
-    var donations = parsedContent.data;
-    for (let i = 0; i < donations.length; i++) {
-      var found = donationsRep.value.find(function(element) {
-        return element.id == donations[i].id;
-      });
-      if (found == undefined) {
-        donations[i].shown = false;
-        donations[i].read = false;
-        donationsRep.value.push(donations[i]);
-      }
-    }
-  }
-
-  function processPolls(content) {
-    var parsedContent = JSON.parse(content);
-    var polls = parsedContent.data;
-    pollsRep.value = polls;
-  }
-
-  function processSchedule(content) {
-    var parsedContent = JSON.parse(content);
-    var schedule = parsedContent.data;
-    scheduleRep.value = schedule;
-  }
-
-  function processChallenges(content) {
-    var parsedContent = JSON.parse(content);
-    var challenges = parsedContent.data;
-    challengesRep.value = challenges;
-  }
-
-  function processRewards(content) {
-    var parsedContent = JSON.parse(content);
-    var rewards = parsedContent.data;
-    rewardsRep.value = rewards;
+    });
   }
 
   function askTiltify() {
@@ -173,9 +135,55 @@ module.exports = function(nodecg) {
     askTiltifyForRewards();
   }
 
-  setInterval(function() {
+  setInterval(function () {
     askTiltify();
   }, 5000);
 
+  setInterval(function () {
+    askTiltifyForAllDonations();
+  }, 10000);
+
   askTiltify();
+  askTiltifyForAllDonations();
+
+  nodecg.listenFor("clear-donations", (value, ack) => {
+    for (let i = 0; i < donationsRep.value.length; i++) {
+      donationsRep.value[i].read = true;
+    }
+
+    if (ack && !ack.handled) {
+      ack(null, value);
+    }
+  });
+
+  nodecg.listenFor("mark-donation-as-read", (value, ack) => {
+    var isElement = (element) => element.id === value.id;
+    var elementIndex = donationsRep.value.findIndex(isElement);
+    if (elementIndex !== -1) {
+      donationsRep.value[elementIndex].read = true;
+      if (ack && !ack.handled) {
+        ack(null, null);
+      }
+    } else {
+      if (ack && !ack.handled) {
+        ack(new Error("Donation not found to mark as read"), null);
+      }
+    }
+  });
+
+  nodecg.listenFor("mark-donation-as-shown", (value, ack) => {
+    var isElement = (element) => element.id === value.id;
+    var elementIndex = donationsRep.value.findIndex(isElement);
+    if (elementIndex !== -1) {
+      donationsRep.value[elementIndex].shown = true;
+      if (ack && !ack.handled) {
+        ack(null, null);
+      }
+    } else {
+      if (ack && !ack.handled) {
+        ack(new Error("Donation not found to mark as read"), null);
+      }
+    }
+  });
+
 };
